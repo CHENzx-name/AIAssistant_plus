@@ -47,6 +47,9 @@ class FloatingChatOverlay(
     private val sendView: ImageButton = inputOverlayView.findViewById(R.id.floating_chat_send)
 
     private var isShown = false
+    private var automationMode = false
+    private var previousX = 16
+    private var previousY = 120
 
     private val displayLayoutParams = createLayoutParams(
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -108,17 +111,22 @@ class FloatingChatOverlay(
 
     fun updateMessages(messages: List<String>) {
         if (!isShown) return
-        val text = if (messages.isEmpty()) {
+        val nonBlank = messages.map { it.trim() }.filter { it.isNotBlank() }
+        val text = if (nonBlank.isEmpty()) {
             context.getString(R.string.floating_chat_empty)
         } else {
-            messages.joinToString("\n\n")
+            nonBlank.joinToString("\n\n")
         }
         textView.text = text
         scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
     }
 
     fun setMessageScrollable(enabled: Boolean) {
-        val flags = displayLayoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        val flags = if (enabled) {
+            displayLayoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        } else {
+            displayLayoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        }
         if (displayLayoutParams.flags == flags) return
         displayLayoutParams.flags = flags
         if (isShown) {
@@ -126,9 +134,67 @@ class FloatingChatOverlay(
         }
     }
 
+    /**
+     * 自动化模式下将悬浮窗切换为触摸穿透，避免拦截底层App手势。
+     * 同时压缩展示区域，降低对底层内容的遮挡。
+     */
+    fun setAutomationMode(enabled: Boolean) {
+        if (automationMode == enabled) return
+        automationMode = enabled
+
+        if (enabled) {
+            previousX = displayLayoutParams.x
+            previousY = displayLayoutParams.y
+            displayLayoutParams.x = 8
+            displayLayoutParams.y = 80
+            displayView.alpha = 0.3f
+            inputOverlayView.visibility = View.GONE
+        } else {
+            displayLayoutParams.x = previousX
+            displayLayoutParams.y = previousY
+            displayView.alpha = 1f
+            inputOverlayView.visibility = View.VISIBLE
+        }
+
+        updateTouchPassThrough(enabled)
+        updateOverlayPositions()
+    }
+
+    private fun updateTouchPassThrough(passThrough: Boolean) {
+        val displayFlags = if (passThrough) {
+            displayLayoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        } else {
+            displayLayoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        }
+        // Keep header interactive so users can always tap the stop button.
+        val headerFlags = headerLayoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        val inputFlags = if (passThrough) {
+            inputLayoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        } else {
+            inputLayoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        }
+
+        displayLayoutParams.flags = displayFlags
+        headerLayoutParams.flags = headerFlags
+        inputLayoutParams.flags = inputFlags
+    }
+
     private fun setupInput() {
         inputView.setOnFocusChangeListener { _, hasFocus ->
             setOverlayFocusable(hasFocus)
+        }
+
+        // When the overlay is focusable, FLAG_WATCH_OUTSIDE_TOUCH is set so taps
+        // outside this window (e.g. on the main activity's chat input) are delivered
+        // as ACTION_OUTSIDE. We use this to explicitly release focus and hide the IME,
+        // allowing the main interface to receive it properly.
+        inputOverlayView.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_OUTSIDE) {
+                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.hideSoftInputFromWindow(inputView.windowToken, 0)
+                inputView.clearFocus()
+            }
+            false
         }
 
         sendView.setOnClickListener {
@@ -152,9 +218,11 @@ class FloatingChatOverlay(
 
     private fun setOverlayFocusable(focusable: Boolean) {
         val flags = if (focusable) {
-            inputLayoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            (inputLayoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         } else {
-            inputLayoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            (inputLayoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) and
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH.inv()
         }
         if (inputLayoutParams.flags == flags) return
         inputLayoutParams.flags = flags

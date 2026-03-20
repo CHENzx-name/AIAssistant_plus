@@ -20,6 +20,8 @@ import android.view.WindowManager
 import android.accessibilityservice.GestureDescription
 import android.graphics.Rect
 import com.example.aiassistant.domain.AgentExecutionBus
+import kotlin.math.max
+import kotlin.math.min
 /**
  * 存放需要特殊权限的系统级工具
  */
@@ -149,64 +151,118 @@ object SystemTools {
             val screenWidth = size.x
             val screenHeight = size.y
 
-            val marginX = (screenWidth * 0.1f).toInt().coerceAtLeast(1)
-            val marginY = (screenHeight * 0.1f).toInt().coerceAtLeast(1)
-            val maxVertical = (screenHeight * 0.6f).toInt()
-            val maxHorizontal = (screenWidth * 0.6f).toInt()
+            val marginX = (screenWidth * 0.08f).toInt().coerceAtLeast(1)
+            val marginY = (screenHeight * 0.08f).toInt().coerceAtLeast(1)
+            val topSafeY = (screenHeight * 0.15f).toInt()
+            val bottomSafeY = (screenHeight * 0.85f).toInt()
+            val leftSafeX = (screenWidth * 0.15f).toInt()
+            val rightSafeX = (screenWidth * 0.85f).toInt()
+            val maxVertical = (bottomSafeY - topSafeY).coerceAtLeast(120)
+            val maxHorizontal = (rightSafeX - leftSafeX).coerceAtLeast(120)
             val overlayBounds = AgentExecutionBus.overlayBounds.value
+            val baseDuration = duration.coerceIn(350, 1600)
 
             // 自适应边界：根据方向限制最大滑动距离
             val actualDistance = when (normalizedDirection) {
-                "up", "down" -> distance.coerceAtMost(maxVertical)
-                "left", "right" -> distance.coerceAtMost(maxHorizontal)
+                "up", "down" -> distance.coerceAtMost(maxVertical).coerceAtLeast(180)
+                "left", "right" -> distance.coerceAtMost(maxHorizontal).coerceAtLeast(180)
                 else -> distance
             }
 
-            // 根据方向确定起始和结束坐标
-            val coordinates = when (normalizedDirection) {
-                "up" -> {
-                    val x = pickSafeX(screenWidth, marginX, overlayBounds)
-                    val startY = (screenHeight - marginY).coerceAtLeast(marginY + 1)
-                    val endY = (startY - actualDistance).coerceAtLeast(marginY)
-                    arrayOf(x, startY, x, endY)
+            var attempts = 0
+            val maxAttempts = 4
+
+            when (normalizedDirection) {
+                "up", "down" -> {
+                    val xCandidates = buildLaneCandidatesX(screenWidth, marginX, overlayBounds)
+                    for (x in xCandidates) {
+                        if (attempts >= maxAttempts) break
+                        // Direction uses content scroll semantics:
+                        // down => finger swipes up, up => finger swipes down.
+                        val startY = if (normalizedDirection == "down") bottomSafeY else topSafeY
+                        val endY = if (normalizedDirection == "down") {
+                            (startY - actualDistance).coerceAtLeast(topSafeY)
+                        } else {
+                            (startY + actualDistance).coerceAtMost(bottomSafeY)
+                        }
+
+                        if (isVerticalPathBlocked(x, startY, endY, overlayBounds)) continue
+
+                        val attemptDuration = baseDuration + attempts * 140
+                        val success = service.performGesture(x, startY, x, endY, attemptDuration)
+                        attempts++
+                        if (success) {
+                            return "成功${normalizedDirection}滑屏幕，距离：$actualDistance 像素，耗时：$attemptDuration 毫秒，第${attempts}次命中"
+                        }
+                        SystemClock.sleep(120)
+                    }
                 }
-                "down" -> {
-                    val x = pickSafeX(screenWidth, marginX, overlayBounds)
-                    val startY = marginY
-                    val endY = (startY + actualDistance).coerceAtMost(screenHeight - marginY)
-                    arrayOf(x, startY, x, endY)
-                }
-                "left" -> {
-                    val startX = (screenWidth - marginX).coerceAtLeast(marginX + 1)
-                    val y = pickSafeY(screenHeight, marginY, overlayBounds)
-                    val endX = (startX - actualDistance).coerceAtLeast(marginX)
-                    arrayOf(startX, y, endX, y)
-                }
-                "right" -> {
-                    val startX = marginX
-                    val y = pickSafeY(screenHeight, marginY, overlayBounds)
-                    val endX = (startX + actualDistance).coerceAtMost(screenWidth - marginX)
-                    arrayOf(startX, y, endX, y)
+                "left", "right" -> {
+                    val yCandidates = buildLaneCandidatesY(screenHeight, marginY, overlayBounds)
+                    for (y in yCandidates) {
+                        if (attempts >= maxAttempts) break
+                        val startX = if (normalizedDirection == "left") rightSafeX else leftSafeX
+                        val endX = if (normalizedDirection == "left") {
+                            (startX - actualDistance).coerceAtLeast(leftSafeX)
+                        } else {
+                            (startX + actualDistance).coerceAtMost(rightSafeX)
+                        }
+
+                        if (isHorizontalPathBlocked(y, startX, endX, overlayBounds)) continue
+
+                        val attemptDuration = baseDuration + attempts * 140
+                        val success = service.performGesture(startX, y, endX, y, attemptDuration)
+                        attempts++
+                        if (success) {
+                            return "成功${normalizedDirection}滑屏幕，距离：$actualDistance 像素，耗时：$attemptDuration 毫秒，第${attempts}次命中"
+                        }
+                        SystemClock.sleep(120)
+                    }
                 }
                 else -> return "错误：无效的方向"
             }
 
-            val startX = coordinates[0]
-            val startY = coordinates[1]
-            val endX = coordinates[2]
-            val endY = coordinates[3]
-
-            // 使用无障碍服务执行滑动
-            val success = service.performGesture(startX, startY, endX, endY, duration)
-            return if (success) {
-                "成功${normalizedDirection}滑屏幕，实际滑动距离：$actualDistance 像素，耗时：$duration 毫秒"
-            } else {
-                "${normalizedDirection}滑失败：无障碍服务无法执行手势"
-            }
+            return "${normalizedDirection}滑失败：已尝试${attempts}次轨迹，系统未完成手势"
 
         } catch (e: Exception) {
             return "${normalizedDirection}滑失败：${e.message ?: "未知错误"}"
         }
+    }
+
+    private fun buildLaneCandidatesX(screenWidth: Int, marginX: Int, overlay: Rect?): List<Int> {
+        val lanes = listOf(0.30f, 0.50f, 0.70f)
+            .map { (screenWidth * it).toInt().coerceIn(marginX, screenWidth - marginX) }
+            .toMutableList()
+        lanes.add(pickSafeX(screenWidth, marginX, overlay))
+        return lanes.distinct()
+    }
+
+    private fun buildLaneCandidatesY(screenHeight: Int, marginY: Int, overlay: Rect?): List<Int> {
+        val lanes = listOf(0.30f, 0.50f, 0.70f)
+            .map { (screenHeight * it).toInt().coerceIn(marginY, screenHeight - marginY) }
+            .toMutableList()
+        lanes.add(pickSafeY(screenHeight, marginY, overlay))
+        return lanes.distinct()
+    }
+
+    private fun isVerticalPathBlocked(x: Int, startY: Int, endY: Int, overlay: Rect?): Boolean {
+        if (overlay == null) return false
+        if (x < overlay.left || x > overlay.right) return false
+        val pathTop = min(startY, endY)
+        val pathBottom = max(startY, endY)
+        return rangesOverlap(pathTop, pathBottom, overlay.top, overlay.bottom)
+    }
+
+    private fun isHorizontalPathBlocked(y: Int, startX: Int, endX: Int, overlay: Rect?): Boolean {
+        if (overlay == null) return false
+        if (y < overlay.top || y > overlay.bottom) return false
+        val pathLeft = min(startX, endX)
+        val pathRight = max(startX, endX)
+        return rangesOverlap(pathLeft, pathRight, overlay.left, overlay.right)
+    }
+
+    private fun rangesOverlap(aStart: Int, aEnd: Int, bStart: Int, bEnd: Int): Boolean {
+        return aStart <= bEnd && bStart <= aEnd
     }
 
     private fun pickSafeX(screenWidth: Int, marginX: Int, overlay: Rect?): Int {

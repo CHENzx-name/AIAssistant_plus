@@ -34,6 +34,7 @@ import androidx.preference.PreferenceManager
 
 import com.example.aiassistant.config.AppConfig
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 
 class ChatViewModel : ViewModel() {
 
@@ -446,7 +447,7 @@ class ChatViewModel : ViewModel() {
 
         // 启动一个后台协程来处理与模型的交互，避免阻塞主线程
         AgentExecutionBus.automationActive.value = true
-        activeJob = viewModelScope.launch {
+        activeJob = viewModelScope.launch(Dispatchers.IO) {
             processConversation(context) // <--- 修改点
         }
         activeJob?.invokeOnCompletion {

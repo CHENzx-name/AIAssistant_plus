@@ -4,8 +4,13 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class AgentAccessibilityService : AccessibilityService() {
 
@@ -45,7 +50,7 @@ class AgentAccessibilityService : AccessibilityService() {
             .addStroke(GestureDescription.StrokeDescription(path, 0, 100))
             .build()
 
-        return dispatchGesture(gesture, null, null)
+        return dispatchGestureAndAwait(gesture, timeoutMs = 1200)
     }
 
     /**
@@ -105,16 +110,69 @@ class AgentAccessibilityService : AccessibilityService() {
      * @return 操作是否成功
      */
     fun performGesture(startX: Int, startY: Int, endX: Int, endY: Int, duration: Int): Boolean {
+        val safeDuration = duration.coerceIn(300, 1800)
+        val dx = endX - startX
+        val dy = endY - startY
+        val distance = kotlin.math.sqrt((dx * dx + dy * dy).toDouble())
+        if (distance < 80.0) {
+            return false
+        }
+
         val path = Path().apply {
             moveTo(startX.toFloat(), startY.toFloat())
             lineTo(endX.toFloat(), endY.toFloat())
         }
 
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, duration.toLong()))
+            .addStroke(GestureDescription.StrokeDescription(path, 0, safeDuration.toLong()))
             .build()
 
-        return dispatchGesture(gesture, null, null)
+        return dispatchGestureAndAwait(gesture, timeoutMs = safeDuration + 1500)
+    }
+
+    private fun dispatchGestureAndAwait(gesture: GestureDescription, timeoutMs: Int): Boolean {
+        // Avoid deadlock: if caller is on main thread, we cannot block waiting for callback.
+        // In this case, return whether the system accepted gesture dispatch.
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return dispatchGesture(gesture, null, null)
+        }
+
+        val latch = CountDownLatch(1)
+        val completed = AtomicBoolean(false)
+        val accepted = AtomicBoolean(false)
+
+        val dispatchAction = {
+            val dispatchAccepted = dispatchGesture(
+                gesture,
+                object : GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        completed.set(true)
+                        latch.countDown()
+                    }
+
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        completed.set(false)
+                        latch.countDown()
+                    }
+                },
+                null
+            )
+
+            accepted.set(dispatchAccepted)
+
+            if (!dispatchAccepted) {
+                completed.set(false)
+                latch.countDown()
+            }
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            dispatchAction()
+        } else {
+            Handler(Looper.getMainLooper()).post(dispatchAction)
+        }
+
+        return latch.await(timeoutMs.toLong(), TimeUnit.MILLISECONDS) && accepted.get() && completed.get()
     }
 
 

@@ -43,6 +43,9 @@ class AgentForegroundService : Service() {
         // 启动协程来监听来自UI的用户消息
         serviceScope.launch {
             AgentExecutionBus.userMessages.collect { userInput ->
+                withContext(Dispatchers.Main) {
+                    floatingOverlay?.setAutomationMode(true)
+                }
                 // 将Service的Context传递给ViewModel，用于需要Context的工具
                 viewModel.sendMessage(userInput, this@AgentForegroundService)
             }
@@ -54,10 +57,18 @@ class AgentForegroundService : Service() {
                 AgentExecutionBus.conversationUpdates.tryEmit(messages)
                 val assistantMessages = messages
                     .filter { it.role == "assistant" }
-                    .mapNotNull { it.content }
+                    .mapNotNull { it.content?.trim()?.takeIf { c -> c.isNotBlank() } }
                     .takeLast(8)
                 withContext(Dispatchers.Main) {
                     floatingOverlay?.updateMessages(assistantMessages)
+                }
+            }
+        }
+
+        serviceScope.launch {
+            AgentExecutionBus.automationActive.collect { active ->
+                withContext(Dispatchers.Main) {
+                    floatingOverlay?.setAutomationMode(active)
                 }
             }
         }
@@ -121,5 +132,6 @@ class AgentForegroundService : Service() {
         )
         floatingOverlay?.show()
         floatingOverlay?.setMessageScrollable(true)
+        floatingOverlay?.setAutomationMode(AgentExecutionBus.automationActive.value)
     }
 }
