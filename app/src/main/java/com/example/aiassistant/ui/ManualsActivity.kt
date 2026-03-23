@@ -58,7 +58,17 @@ class ManualsActivity : AppCompatActivity() {
             if (assetsManuals != null) {
                 for (fileName in assetsManuals) {
                     if (!fileName.endsWith(".md")) continue
-                    val appName = fileName.replace("_manual.md", "").replace("_", " ")
+                    var appName = fileName
+                    // 处理不同的文件命名格式
+                    if (appName.endsWith("_manual.md")) {
+                        appName = appName.replace("_manual.md", "")
+                    } else if (appName.endsWith("_manal.md")) {
+                        appName = appName.replace("_manal.md", "")
+                    } else {
+                        appName = appName.replace(".md", "")
+                    }
+                    // 替换下划线为空格
+                    appName = appName.replace("_", " ")
                     if (!manualsList.contains(appName)) {
                         manualsList.add(appName)
                         manualFiles.add(File("assets/$fileName"))
