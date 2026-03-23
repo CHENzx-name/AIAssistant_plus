@@ -22,7 +22,15 @@
             android:fontFamily="monospace"
             android:inputType="textMultiLine"
             android:gravity="top"
-            android:background="@android:color/transparent" />
+            android:background="@android:color/transparent"
+            android:padding="8dp"
+            android:maxLines="1000"
+            android:scrollbars="vertical"
+            android:scrollbarStyle="insideOverlay"
+            android:overScrollMode="always"
+            android:focusable="false"
+            android:focusableInTouchMode="false"
+            android:clickable="false" />
 
     </LinearLayout>
 
