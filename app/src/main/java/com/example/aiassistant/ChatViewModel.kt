@@ -35,6 +35,9 @@ import androidx.preference.PreferenceManager
 import com.example.aiassistant.config.AppConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import java.io.File
+import java.nio.charset.StandardCharsets
+import android.util.Log
 
 class ChatViewModel : ViewModel() {
 
@@ -580,7 +583,13 @@ class ChatViewModel : ViewModel() {
                         val params =
                             json.decodeFromString<LaunchAppParams>(toolCall.function.arguments)
                         // 调用您在第一步中创建的函数
-                        SystemTools.launchApp(context, params.packageName)
+                        val result = SystemTools.launchApp(context, params.packageName)
+                        // 检查操作是否成功
+                        if (result.startsWith("应用 ")) {
+                            // 操作成功，检查是否需要创建说明书
+                            checkAndCreateManual(context, params.packageName)
+                        }
+                        result
                     } catch (e: Exception) {
                         "错误：解析参数失败 - ${e.message}"
                     }
@@ -647,8 +656,20 @@ class ChatViewModel : ViewModel() {
 
     private fun listManualsFromAssets(context: Context): String {
         return try {
-            val manuals = context.assets.list("manuals")?.toList() ?: emptyList()
-            Json.encodeToString(ListSerializer(String.serializer()), manuals)
+            // 先从内部存储读取
+            val internalManualsDir = File(context.filesDir, "manuals")
+            val internalManuals = if (internalManualsDir.exists()) {
+                internalManualsDir.listFiles { _, name -> name.endsWith(".md") }?.map { it.name } ?: emptyList()
+            } else {
+                emptyList()
+            }
+            
+            // 再从assets读取
+            val assetsManuals = context.assets.list("manuals")?.toList() ?: emptyList()
+            
+            // 合并去重
+            val allManuals = (internalManuals + assetsManuals).distinct()
+            Json.encodeToString(ListSerializer(String.serializer()), allManuals)
         } catch (e: Exception) {
             "错误: 无法读取说明书列表，原因：${e.message}"
         }
@@ -656,11 +677,18 @@ class ChatViewModel : ViewModel() {
 
     private fun getSectionFromManual(context: Context, manualName: String, query: String): String {
         return try {
-            // 1. 读取并解析指定的说明书
-            val markdownContent = context.assets.open("manuals/$manualName").bufferedReader().use { it.readText() }
+            // 1. 先尝试从内部存储读取
+            val internalManualFile = File(File(context.filesDir, "manuals"), manualName)
+            val markdownContent = if (internalManualFile.exists()) {
+                internalManualFile.readText(StandardCharsets.UTF_8)
+            } else {
+                // 2. 如果内部存储没有，从assets读取
+                context.assets.open("manuals/$manualName").bufferedReader().use { it.readText() }
+            }
+            
             val sections = parseMarkdownManual(markdownContent)
 
-            // 2. 查找最相关的章节 (这里使用简单的关键词匹配)
+            // 3. 查找最相关的章节 (这里使用简单的关键词匹配)
             val bestMatch = sections.entries.find { (title, _) ->
                 title.contains(query, ignoreCase = true)
             }
@@ -679,6 +707,159 @@ class ChatViewModel : ViewModel() {
             }
         } catch (e: Exception) {
             "错误: 无法读取或解析说明书 '$manualName'，原因: ${e.message}"
+        }
+    }
+
+    /**
+     * 检查并创建应用说明书
+     * @param context 上下文环境
+     * @param packageName 应用包名
+     */
+    private fun checkAndCreateManual(context: Context, packageName: String) {
+        try {
+            // 使用内部存储来存储说明书
+            val manualsDir = File(context.filesDir, "manuals")
+            if (!manualsDir.exists()) {
+                manualsDir.mkdirs()
+            }
+            
+            val manualFileName = "${packageName}_manual.md"
+            val manualFile = File(manualsDir, manualFileName)
+            
+            // 获取应用名称
+            val appName = try {
+                val pm = context.packageManager
+                val appInfo = pm.getApplicationInfo(packageName, 0)
+                pm.getApplicationLabel(appInfo).toString()
+            } catch (e: Exception) {
+                packageName
+            }
+            
+            // 根据应用包名生成相关功能操作
+            val appSpecificContent = generateAppSpecificContent(packageName)
+            
+            if (!manualFile.exists()) {
+                // 如果说明书不存在，创建新的
+                // 创建说明书内容，使用与assets一致的格式
+                val manualContent = generateManualContent(appName, packageName, appSpecificContent)
+                
+                // 写入到内部存储
+                manualFile.writeText(manualContent, StandardCharsets.UTF_8)
+                Log.d("ChatViewModel", "创建新说明书: ${manualFile.absolutePath}")
+            } else {
+                // 如果说明书存在，更新内容
+                val existingContent = manualFile.readText(StandardCharsets.UTF_8)
+                val currentTime = java.time.LocalDateTime.now()
+                
+                var updatedContent = existingContent
+                
+                // 更新功能说明部分
+                if (existingContent.contains("## 1.")) {
+                    // 如果已有编号章节，在末尾添加新功能
+                    updatedContent = "$updatedContent\n\n${generateNewFunctionSection(packageName)}"
+                } else {
+                    // 如果没有编号章节，重新生成整个内容
+                    updatedContent = generateManualContent(appName, packageName, appSpecificContent)
+                }
+                
+                manualFile.writeText(updatedContent, StandardCharsets.UTF_8)
+                Log.d("ChatViewModel", "更新说明书: ${manualFile.absolutePath}")
+            }
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "检查或创建说明书失败", e)
+        }
+    }
+    
+    /**
+     * 生成与assets格式一致的说明书内容
+     * @param appName 应用名称
+     * @param packageName 应用包名
+     * @param appSpecificContent 应用特定的功能操作说明
+     * @return 说明书内容
+     */
+    private fun generateManualContent(appName: String, packageName: String, appSpecificContent: String): String {
+        return """
+# $appName APP 指南
+
+## 1. 启动应用打开方法
+1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
+2. 等待应用完全加载
+3. 进入应用主界面
+
+$appSpecificContent
+        """.trimIndent()
+    }
+    
+    /**
+     * 生成新的功能章节
+     * @param packageName 应用包名
+     * @return 新的功能章节内容
+     */
+    private fun generateNewFunctionSection(packageName: String): String {
+        return when (packageName) {
+            "com.bilibili.app.in" -> """
+## 2. 播放电影打开方法
+1. 打开 **B站**，如有广告弹窗点击 **跳过**。
+2. 点击顶部 **搜索栏**（放大镜图标）。
+3. 输入电影名称，点击 **搜索**。
+4. 在搜索结果中找到电影并点击
+5. 点击播放按钮开始观看
+            """
+            else -> ""
+        }
+    }
+    
+    /**
+     * 根据应用包名生成特定应用的功能操作说明
+     * @param packageName 应用包名
+     * @return 应用特定的功能操作说明
+     */
+    private fun generateAppSpecificContent(packageName: String): String {
+        return when (packageName) {
+            "com.bilibili.app.in" -> """
+## 2. 播放电影打开方法
+1. 打开 **B站**，如有广告弹窗点击 **跳过**。
+2. 点击顶部 **搜索栏**（放大镜图标）。
+3. 输入电影名称，点击 **搜索**。
+4. 在搜索结果中找到电影并点击
+5. 点击播放按钮开始观看
+
+## 3. 浏览视频打开方法
+1. 打开 **B站**，如有广告弹窗点击 **跳过**。
+2. 浏览首页推荐视频
+3. 点击感兴趣的视频开始观看
+
+## 4. 搜索内容打开方法
+1. 打开 **B站**，如有广告弹窗点击 **跳过**。
+2. 点击顶部 **搜索栏**（放大镜图标）。
+3. 输入搜索内容，点击 **搜索**。
+4. 浏览搜索结果
+            """
+            "com.tencent.mm" -> """
+## 2. 发送消息打开方法
+1. 打开 **微信**，如有广告弹窗点击 **跳过**。
+2. 点击底部的 **聊天** 按钮
+3. 选择要发送消息的联系人
+4. 输入消息内容
+5. 点击发送按钮
+
+## 3. 语音通话打开方法
+1. 打开 **微信**，如有广告弹窗点击 **跳过**。
+2. 选择要通话的联系人
+3. 点击 **+** 按钮
+4. 选择 **语音通话**
+            """
+            else -> """
+## 2. 基本界面操作
+1. 打开应用
+2. 浏览主界面
+3. 点击相应功能按钮
+
+## 3. 核心功能使用
+1. 根据应用提示操作
+2. 使用主要功能
+3. 查看结果
+            """
         }
     }
 

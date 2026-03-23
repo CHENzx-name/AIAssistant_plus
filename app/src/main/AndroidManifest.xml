@@ -42,6 +42,28 @@
                 android:value=".ui.MainActivity" />
         </activity>
 
+        <activity
+            android:name=".ui.ManualsActivity"
+            android:exported="false"
+            android:label="应用说明书"
+            android:parentActivityName=".ui.SettingsActivity"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".ui.SettingsActivity" />
+        </activity>
+
+        <activity
+            android:name=".ui.ManualDetailActivity"
+            android:exported="false"
+            android:label="说明书详情"
+            android:parentActivityName=".ui.ManualsActivity"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".ui.ManualsActivity" />
+        </activity>
+
     <service
             android:name=".services.AgentAccessibilityService"
             android:exported="true"
