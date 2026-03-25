@@ -22,6 +22,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -33,6 +35,7 @@ import com.example.aiassistant.R
 import com.example.aiassistant.domain.AgentExecutionBus
 import com.example.aiassistant.services.AgentAccessibilityService
 import com.example.aiassistant.services.AgentForegroundService
+import com.example.aiassistant.services.AsrManager
 import com.example.aiassistant.utils.AccessibilityUtils
 import kotlinx.coroutines.launch
 import com.example.aiassistant.data.ChatMessage as ApiChatMessage // 使用别名区分API模型
@@ -44,12 +47,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chatRecyclerView: RecyclerView
     private lateinit var messageInput: EditText
     private lateinit var sendButton: ImageButton
+    private lateinit var micButton: ImageButton
     private lateinit var settingsButton: ImageView
     private lateinit var exitButton: Button
     private lateinit var accessibilityButton: Button
     private lateinit var assistantLayout: ConstraintLayout
     private lateinit var rootContainer: View
-    // --- 数据和适配器 ---
+
+    private val asrManager by lazy {
+        AsrManager(
+            this,
+            onResult = { text ->
+                messageInput.setText(text)
+                messageInput.setSelection(text.length)
+            },
+            onError = { msg ->
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+        )
+    } 数据和适配器 ---
     // MODIFIED: 使用正确的UI模型 ChatMessage，以匹配ChatAdapter的构造函数
     private val messageListForAdapter = mutableListOf<ChatMessage>()
     private lateinit var chatAdapter: ChatAdapter
@@ -86,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         chatRecyclerView = findViewById(R.id.chat_recycler_view)
         messageInput = findViewById(R.id.message_input)
         sendButton = findViewById(R.id.send_button)
+        micButton = findViewById(R.id.mic_button)
         settingsButton = findViewById(R.id.settings_button)
         exitButton = findViewById(R.id.exit_button)
         accessibilityButton = findViewById(R.id.accessibility_button)
@@ -120,6 +137,31 @@ class MainActivity : AppCompatActivity() {
                     AgentExecutionBus.userMessages.emit(userInput)
                 }
                 messageInput.text.clear()
+            }
+        }
+
+        micButton.setOnTouchListener { _, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+                        == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        micButton.alpha = 0.5f
+                        asrManager.startRecording()
+                    } else {
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(android.Manifest.permission.RECORD_AUDIO),
+                            REQ_RECORD_AUDIO
+                        )
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    micButton.alpha = 1.0f
+                    asrManager.stopRecording()
+                    true
+                }
+                else -> false
             }
         }
 
@@ -291,6 +333,22 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, AgentForegroundService::class.java)
         intent.action = AgentForegroundService.ACTION_REFRESH_OVERLAY
         startService(intent)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_RECORD_AUDIO &&
+            grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "麦克风权限已授予，请再次按住录音", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    companion object {
+        private const val REQ_RECORD_AUDIO = 1001
     }
 }
 

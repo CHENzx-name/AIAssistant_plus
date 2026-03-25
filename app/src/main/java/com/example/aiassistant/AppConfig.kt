@@ -15,6 +15,11 @@ object AppConfig {
     lateinit var apiKey: String
     lateinit var modelName: String
 
+    // --- 讯飞 SparkChain 三元组 ---
+    const val XUNFEI_APP_ID  = "YOUR_APP_ID"
+    const val XUNFEI_API_KEY = "YOUR_API_KEY"
+    const val XUNFEI_API_SECRET = "YOUR_API_SECRET"
+
     // --- 内部逻辑 ---
     private const val DEFAULT_MODEL = "deepseek/deepseek-v3.2-251201"
     private const val PREFS_VERSION_KEY = "app_config_version"
