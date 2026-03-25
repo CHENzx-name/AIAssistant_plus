@@ -3,15 +3,26 @@ package com.example.aiassistant.services
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import android.util.Log
 import com.example.aiassistant.config.AppConfig
-import com.iflytek.sparkchain.core.SparkChain
-import com.iflytek.sparkchain.core.SparkChainConfig
-import com.iflytek.sparkchain.core.asr.ASR
-import com.iflytek.sparkchain.core.asr.AsrCallbacks
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okio.ByteString.Companion.toByteString
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.net.URLEncoder
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /**
- * 封装讯飞 SparkChain ASR 语音听写。
+ * 封装讯飞实时语音转写大模型（WebSocket 接口）。
  * 使用方式：按住时调用 startRecording()，松开时调用 stopRecording()。
  * 识别结果通过 onResult 回调在主线程返回。
  */
@@ -22,125 +33,171 @@ class AsrManager(
 ) {
     private val TAG = "AsrManager"
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val client = OkHttpClient()
 
-    private var mAsr: ASR? = null
+    private var webSocket: WebSocket? = null
     private var audioRecorder: AudioRecorderHelper? = null
-    private var sdkInited = false
     private val resultBuffer = StringBuilder()
+    private val audioBufferStream = ByteArrayOutputStream()
+    private var sessionId = ""
 
-    // -------------------------------------------------------
-    // SparkChain 初始化（只需一次）
-    // -------------------------------------------------------
-    fun initSdk() {
-        if (sdkInited) return
-        val config = SparkChainConfig.builder()
-            .appID(AppConfig.XUNFEI_APP_ID)
-            .apiKey(AppConfig.XUNFEI_API_KEY)
-            .apiSecret(AppConfig.XUNFEI_API_SECRET)
-        val ret = SparkChain.getInst().init(context.applicationContext, config)
-        if (ret == 0) {
-            sdkInited = true
-            Log.d(TAG, "SparkChain SDK init OK")
-        } else {
-            Log.e(TAG, "SparkChain SDK init failed: $ret")
-            mainHandler.post { onError("SDK 初始化失败: $ret") }
-        }
-    }
+    // 无需 SDK 初始化，WebSocket 接口直接连接
+    fun initSdk() = Unit
 
-    // -------------------------------------------------------
-    // 开始录音识别
-    // -------------------------------------------------------
     fun startRecording() {
-        if (!sdkInited) {
-            initSdk()
-            if (!sdkInited) return
-        }
+        sessionId = UUID.randomUUID().toString()
         resultBuffer.clear()
+        audioBufferStream.reset()
 
-        val asr = ASR()
-        asr.registerCallbacks(asrCallbacks)
-        asr.language("zh_cn")
-        asr.domain("iat")
-        asr.accent("mandarin")
-        asr.vinfo(true)
-        asr.dwa("wpgs")
-        mAsr = asr
-
-        val ret = asr.start(count++.toString())
-        if (ret != 0) {
-            Log.e(TAG, "ASR start failed: $ret")
-            mainHandler.post { onError("启动识别失败: $ret") }
-            mAsr = null
-            return
-        }
-
-        audioRecorder = AudioRecorderHelper { data ->
-            mAsr?.write(data)
-        }
-        audioRecorder?.start()
-        Log.d(TAG, "ASR started")
+        val url = buildUrl()
+        Log.d(TAG, "Connecting: $url")
+        val request = Request.Builder().url(url).build()
+        webSocket = client.newWebSocket(request, wsListener)
     }
 
-    // -------------------------------------------------------
-    // 停止录音，等待最终结果回调
-    // -------------------------------------------------------
     fun stopRecording() {
         audioRecorder?.stop()
         audioRecorder = null
-        mAsr?.stop(true)
+
+        // 把缓冲区剩余音频发完
+        synchronized(audioBufferStream) {
+            val remaining = audioBufferStream.toByteArray()
+            audioBufferStream.reset()
+            if (remaining.isNotEmpty()) {
+                webSocket?.send(remaining.toByteString())
+            }
+        }
+        // 发送结束标识
+        val endMsg = JSONObject()
+            .put("end", true)
+            .put("sessionId", sessionId)
+            .toString()
+        webSocket?.send(endMsg)
         Log.d(TAG, "ASR stop requested")
     }
 
-    // -------------------------------------------------------
-    // 释放资源
-    // -------------------------------------------------------
     fun release() {
         stopRecording()
-        mAsr = null
+        webSocket?.close(1000, null)
+        webSocket = null
     }
 
     // -------------------------------------------------------
-    // ASR 回调（AsrCallbacks 是 interface）
+    // 构造鉴权 URL
     // -------------------------------------------------------
-    private val asrCallbacks = object : AsrCallbacks {
-        override fun onResult(asrResult: ASR.ASRResult?, o: Any?) {
-            val status = asrResult?.getStatus() ?: return
-            val text = asrResult.getBestMatchText() ?: return
-            Log.d(TAG, "onResult status=$status text=$text")
-            when (status) {
-                0 -> {
-                    resultBuffer.clear()
-                    resultBuffer.append(text)
+    private fun buildUrl(): String {
+        val appId        = AppConfig.XUNFEI_APP_ID
+        val accessKeyId  = AppConfig.XUNFEI_API_KEY
+        val accessKeySecret = AppConfig.XUNFEI_API_SECRET
+        val utc  = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXX"))
+        val uuid = UUID.randomUUID().toString()
+
+        // 按 key 升序排列（签名要求）
+        val params = sortedMapOf(
+            "accessKeyId" to accessKeyId,
+            "appId"       to appId,
+            "audio_encode" to "pcm_s16le",
+            "lang"        to "autodialect",
+            "samplerate"  to "16000",
+            "utc"         to utc,
+            "uuid"        to uuid
+        )
+
+        val baseString = params.entries.joinToString("&") { (k, v) ->
+            "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
+        }
+        val signature = hmacSha1Base64(accessKeySecret, baseString)
+
+        val query = baseString + "&signature=${URLEncoder.encode(signature, "UTF-8")}"
+        return "wss://office-api-ast-dx.iflyaisol.com/ast/communicate/v1?$query"
+    }
+
+    private fun hmacSha1Base64(key: String, data: String): String {
+        val mac = Mac.getInstance("HmacSHA1")
+        mac.init(SecretKeySpec(key.toByteArray(Charsets.UTF_8), "HmacSHA1"))
+        return Base64.encodeToString(mac.doFinal(data.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+    }
+
+    // -------------------------------------------------------
+    // WebSocket 监听
+    // -------------------------------------------------------
+    private val wsListener = object : WebSocketListener() {
+
+        override fun onOpen(ws: WebSocket, response: Response) {
+            Log.d(TAG, "WebSocket opened")
+            audioRecorder = AudioRecorderHelper { data ->
+                synchronized(audioBufferStream) {
+                    audioBufferStream.write(data)
+                    // 每 1280 字节发一帧（约 40ms）
+                    while (audioBufferStream.size() >= CHUNK_SIZE) {
+                        val all   = audioBufferStream.toByteArray()
+                        val chunk = all.copyOf(CHUNK_SIZE)
+                        ws.send(chunk.toByteString())
+                        audioBufferStream.reset()
+                        audioBufferStream.write(all, CHUNK_SIZE, all.size - CHUNK_SIZE)
+                    }
                 }
-                1 -> {
-                    resultBuffer.clear()
-                    resultBuffer.append(text)
+            }
+            audioRecorder?.start()
+        }
+
+        override fun onMessage(ws: WebSocket, text: String) {
+            Log.d(TAG, "WS msg: $text")
+            try {
+                val json = JSONObject(text)
+                if (json.optString("msg_type") != "result") return
+                if (json.optString("res_type") != "asr")    return
+
+                val data = json.optJSONObject("data") ?: return
+                val ls   = data.optBoolean("ls", false)
+                val st   = data.optJSONObject("cn")?.optJSONObject("st") ?: return
+                val type = st.optString("type")
+                val rt   = st.optJSONArray("rt")    ?: return
+
+                val sb = StringBuilder()
+                for (i in 0 until rt.length()) {
+                    val wsList = rt.getJSONObject(i).optJSONArray("ws") ?: continue
+                    for (j in 0 until wsList.length()) {
+                        val cwList = wsList.getJSONObject(j).optJSONArray("cw") ?: continue
+                        for (k in 0 until cwList.length()) {
+                            val cw = cwList.getJSONObject(k)
+                            if (cw.optString("wp") != "s") {  // 跳过顺滑词
+                                sb.append(cw.optString("w"))
+                            }
+                        }
+                    }
                 }
-                2 -> {
-                    resultBuffer.clear()
-                    resultBuffer.append(text)
+
+                // type=0 确定性结果，追加到缓冲区
+                if (type == "0") {
+                    resultBuffer.append(sb)
+                }
+
+                // ls=true 时为最后一帧，上报最终结果
+                if (ls) {
                     val final = resultBuffer.toString().trim()
                     if (final.isNotEmpty()) {
                         mainHandler.post { onResult(final) }
                     }
-                    mAsr = null
+                    resultBuffer.clear()
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Parse error: $e")
             }
         }
 
-        override fun onError(asrError: ASR.ASRError?, o: Any?) {
-            val msg = asrError?.getErrMsg() ?: "未知错误"
-            val code = asrError?.getCode() ?: -1
-            Log.e(TAG, "onError code=$code msg=$msg")
-            mainHandler.post { onError("识别出错($code): $msg") }
-            mAsr = null
+        override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+            Log.e(TAG, "WS failure: $t response=${response?.code}")
+            mainHandler.post { onError("连接失败: ${t.message}") }
         }
 
-        override fun onBeginOfSpeech() {}
-        override fun onEndOfSpeech() {}
+        override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+            Log.d(TAG, "WS closing: $code $reason")
+            ws.close(1000, null)
+        }
     }
 
     companion object {
-        private var count = 0
+        private const val CHUNK_SIZE = 1280
     }
 }

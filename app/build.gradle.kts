@@ -5,10 +5,6 @@ plugins {
 }
 
 android {
-    repositories {
-        flatDir { dirs("libs") }
-    }
-
     namespace = "com.example.aiassistant"
     compileSdk = 35
 
@@ -20,6 +16,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     buildTypes {
