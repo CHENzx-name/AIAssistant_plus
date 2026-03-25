@@ -65,7 +65,9 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
         )
-    } 数据和适配器 ---
+    }
+
+    // --- 数据和适配器 ---
     // MODIFIED: 使用正确的UI模型 ChatMessage，以匹配ChatAdapter的构造函数
     private val messageListForAdapter = mutableListOf<ChatMessage>()
     private lateinit var chatAdapter: ChatAdapter

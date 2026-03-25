@@ -9,9 +9,6 @@ import com.iflytek.sparkchain.core.SparkChain
 import com.iflytek.sparkchain.core.SparkChainConfig
 import com.iflytek.sparkchain.core.asr.ASR
 import com.iflytek.sparkchain.core.asr.AsrCallbacks
-import com.iflytek.sparkchain.core.asr.bean.ASRResult
-import com.iflytek.sparkchain.core.asr.bean.AsrError
-import com.iflytek.sparkchain.core.asr.listener.AudioDataListener
 
 /**
  * 封装讯飞 SparkChain ASR 语音听写。
@@ -29,7 +26,6 @@ class AsrManager(
     private var mAsr: ASR? = null
     private var audioRecorder: AudioRecorderHelper? = null
     private var sdkInited = false
-    // 累积中间结果
     private val resultBuffer = StringBuilder()
 
     // -------------------------------------------------------
@@ -61,16 +57,16 @@ class AsrManager(
         }
         resultBuffer.clear()
 
-        mAsr = ASR().apply {
-            registerCallbacks(asrCallbacks)
-            language("zh_cn")
-            domain("iat")
-            accent("mandarin")
-            vinfo(true)
-            dwa("wpgs")  // 动态修正，实时更新识别结果
-        }
+        val asr = ASR()
+        asr.registerCallbacks(asrCallbacks)
+        asr.language("zh_cn")
+        asr.domain("iat")
+        asr.accent("mandarin")
+        asr.vinfo(true)
+        asr.dwa("wpgs")
+        mAsr = asr
 
-        val ret = mAsr!!.start(count++.toString())
+        val ret = asr.start(count++.toString())
         if (ret != 0) {
             Log.e(TAG, "ASR start failed: $ret")
             mainHandler.post { onError("启动识别失败: $ret") }
@@ -78,7 +74,6 @@ class AsrManager(
             return
         }
 
-        // 启动麦克风采集并写入 ASR
         audioRecorder = AudioRecorderHelper { data ->
             mAsr?.write(data)
         }
@@ -92,7 +87,7 @@ class AsrManager(
     fun stopRecording() {
         audioRecorder?.stop()
         audioRecorder = null
-        mAsr?.stop()
+        mAsr?.stop(true)
         Log.d(TAG, "ASR stop requested")
     }
 
@@ -105,23 +100,23 @@ class AsrManager(
     }
 
     // -------------------------------------------------------
-    // ASR 回调
+    // ASR 回调（AsrCallbacks 是 interface）
     // -------------------------------------------------------
-    private val asrCallbacks = object : AsrCallbacks() {
-        override fun onResult(asrResult: ASRResult?, o: Any?) {
-            val status = asrResult?.status ?: return
-            val text = asrResult.bestMatchText ?: return
+    private val asrCallbacks = object : AsrCallbacks {
+        override fun onResult(asrResult: ASR.ASRResult?, o: Any?) {
+            val status = asrResult?.getStatus() ?: return
+            val text = asrResult.getBestMatchText() ?: return
             Log.d(TAG, "onResult status=$status text=$text")
             when (status) {
-                0 -> { // 第一块结果
+                0 -> {
                     resultBuffer.clear()
                     resultBuffer.append(text)
                 }
-                1 -> { // 中间结果（wpgs 动态修正会替换整句）
+                1 -> {
                     resultBuffer.clear()
                     resultBuffer.append(text)
                 }
-                2 -> { // 最终结果
+                2 -> {
                     resultBuffer.clear()
                     resultBuffer.append(text)
                     val final = resultBuffer.toString().trim()
@@ -133,9 +128,9 @@ class AsrManager(
             }
         }
 
-        override fun onError(asrError: AsrError?, o: Any?) {
-            val msg = asrError?.errMsg ?: "未知错误"
-            val code = asrError?.errCode ?: -1
+        override fun onError(asrError: ASR.ASRError?, o: Any?) {
+            val msg = asrError?.getErrMsg() ?: "未知错误"
+            val code = asrError?.getCode() ?: -1
             Log.e(TAG, "onError code=$code msg=$msg")
             mainHandler.post { onError("识别出错($code): $msg") }
             mAsr = null
