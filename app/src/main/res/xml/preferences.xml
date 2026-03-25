@@ -20,13 +20,25 @@
             app:useSimpleSummaryProvider="true" />
 
     </PreferenceCategory>
-    
+
+    <PreferenceCategory app:title="语音输入">
+
+        <ListPreference
+            app:key="key_mic_mode"
+            app:title="语音按钮行为"
+            app:defaultValue="fill"
+            app:entries="@array/mic_mode_entries"
+            app:entryValues="@array/mic_mode_values"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="说明书管理">
-        
+
         <Preference
             app:key="key_manuals"
             app:title="查看说明书"
             app:summary="管理和查看已创建的应用说明书" />
-        
+
     </PreferenceCategory>
 </PreferenceScreen>

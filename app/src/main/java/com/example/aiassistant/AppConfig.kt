@@ -14,6 +14,7 @@ object AppConfig {
     // --- 全局可见的配置变量 ---
     lateinit var apiKey: String
     lateinit var modelName: String
+    var micMode: String = "fill"
 
     // --- 讯飞 SparkChain 三元组 ---
     const val XUNFEI_APP_ID  = "bbd010e0"
@@ -65,6 +66,7 @@ object AppConfig {
             storedApiKey
         }
         modelName = prefs.getString("key_model_name", DEFAULT_MODEL) ?: DEFAULT_MODEL
+        micMode = prefs.getString("key_mic_mode", "fill") ?: "fill"
 
         // 2. 初始化并注册监听器
         listener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
@@ -75,6 +77,9 @@ object AppConfig {
                 }
                 "key_model_name" -> {
                     modelName = sharedPreferences?.getString(key, DEFAULT_MODEL) ?: DEFAULT_MODEL
+                }
+                "key_mic_mode" -> {
+                    micMode = sharedPreferences?.getString(key, "fill") ?: "fill"
                 }
             }
         }

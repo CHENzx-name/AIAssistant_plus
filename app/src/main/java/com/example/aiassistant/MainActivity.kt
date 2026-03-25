@@ -58,8 +58,14 @@ class MainActivity : AppCompatActivity() {
         AsrManager(
             this,
             onResult = { text ->
-                messageInput.setText(text)
-                messageInput.setSelection(text.length)
+                if (AppConfig.micMode == "send") {
+                    messageInput.setText(text)
+                    messageInput.setSelection(text.length)
+                    sendButton.performClick()
+                } else {
+                    messageInput.setText(text)
+                    messageInput.setSelection(text.length)
+                }
             },
             onError = { msg ->
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
