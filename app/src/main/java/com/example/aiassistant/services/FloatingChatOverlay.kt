@@ -21,6 +21,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import com.example.aiassistant.R
 import com.example.aiassistant.domain.AgentExecutionBus
 
@@ -45,6 +46,18 @@ class FloatingChatOverlay(
     private val inputRoot: View = inputOverlayView.findViewById(R.id.floating_chat_input_root)
     private val inputView: EditText = inputOverlayView.findViewById(R.id.floating_chat_input)
     private val sendView: ImageButton = inputOverlayView.findViewById(R.id.floating_chat_send)
+    private val micView: ImageButton = inputOverlayView.findViewById(R.id.floating_chat_mic)
+
+    private val asrManager = AsrManager(
+        context,
+        onResult = { text ->
+            inputView.setText(text)
+            inputView.setSelection(text.length)
+        },
+        onError = { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        }
+    )
 
     private var isShown = false
     private var automationMode = false
@@ -103,6 +116,7 @@ class FloatingChatOverlay(
 
     fun dismiss() {
         if (!isShown) return
+        asrManager.release()
         windowManager.removeView(displayView)
         windowManager.removeView(headerOverlayView)
         windowManager.removeView(inputOverlayView)
@@ -203,6 +217,22 @@ class FloatingChatOverlay(
                 AgentExecutionBus.userMessages.tryEmit(userInput)
                 inputView.text.clear()
                 inputView.clearFocus()
+            }
+        }
+
+        micView.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    micView.alpha = 0.5f
+                    asrManager.startRecording()
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    micView.alpha = 1.0f
+                    asrManager.stopRecording()
+                    true
+                }
+                else -> false
             }
         }
 

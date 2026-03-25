@@ -16,6 +16,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -57,6 +61,10 @@ dependencies {
 
     // OkHttp 日志拦截器 - 强烈建议添加，便于调试网络请求
     implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
+
+    // 讯飞 SparkChain ASR SDK
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
+    implementation("com.google.code.gson:gson:2.8.8")
 
     // AndroidX Activity KTX - 用于轻松地创建ViewModel实例
     implementation("androidx.activity:activity-ktx:1.9.0")

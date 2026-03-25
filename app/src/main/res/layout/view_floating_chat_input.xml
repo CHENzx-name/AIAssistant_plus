@@ -31,6 +31,15 @@
             android:singleLine="true" />
 
         <ImageButton
+            android:id="@+id/floating_chat_mic"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_send_button"
+            android:contentDescription="按住说话"
+            android:src="@drawable/ic_mic" />
+
+        <ImageButton
             android:id="@+id/floating_chat_send"
             android:layout_width="40dp"
             android:layout_height="40dp"
