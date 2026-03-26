@@ -5,17 +5,20 @@
 ## ✨ 功能特性
 
 ### 🤖 智能交互
+
 - **大模型对话**：集成兼容OpenAI接口的大语言模型，支持自然语言对话
 - **语音输入**：支持语音输入指令
 - **实时响应**：快速处理用户请求并执行操作
 
 ### 📱 自动化操作
+
 - **应用启动**：自动打开指定应用
 - **界面交互**：点击、滑动、输入文本等操作
 - **屏幕观察**：实时分析屏幕内容
 - **多应用支持**：支持各种常用应用的操作
 
 ### 📚 智能说明书
+
 - **自动生成**：根据操作自动生成应用操作说明书
 - **持续更新**：每次操作后自动更新说明书，添加新功能章节
 - **中文命名**：使用应用中文名称作为说明书文件名，更直观
@@ -25,6 +28,7 @@
 - **智能去重**：自动检测并避免重复内容添加
 
 ### ⚙️ 配置管理
+
 - **API配置**：支持配置API Key和模型名称
 - **持久化存储**：配置自动保存到SharedPreferences
 - **灵活设置**：支持不同模型和接口的切换
@@ -41,6 +45,7 @@
 ## 🚀 快速开始
 
 ### 环境要求
+
 - Android Studio
 - minSdk: 26
 - targetSdk: 35
@@ -48,12 +53,18 @@
 - JDK: 11
 
 ### 安装步骤
+
 1. 使用Android Studio打开项目
 2. 同步Gradle依赖
 3. 连接Android设备或启动模拟器
 4. 运行app模块
 
+<br />
+
+或直接在AI\_APP\app\build\outputs\apk\debug路径下找到apk文件安装到shou'ji'shang即可
+
 ### 使用方法
+
 1. **启动应用**：打开AI Assistant应用
 2. **配置API**：进入设置页面，配置API Key和模型名称
 3. **启用权限**：根据提示启用无障碍服务和前台服务
@@ -65,16 +76,19 @@
 ## 📖 使用示例
 
 ### 基本操作
+
 ```
 打开微信
 ```
 
 ### 复杂操作
+
 ```
 打开B站并搜索电影
 ```
 
 ### 多步骤操作
+
 ```
 打开微信，给张三发送消息"你好"
 ```
@@ -84,22 +98,24 @@
 应用默认使用兼容OpenAI的`/chat/completions`接口。
 
 ### 配置位置
+
 - **API Key**：在设置页面配置
 - **模型名称**：在设置页面配置
 - **配置文件**：`app/src/main/java/com/example/aiassistant/config/AppConfig.kt`
 
 ### 接口定义
+
 - **Retrofit配置**：`app/src/main/java/com/example/aiassistant/data/RetrofitClient.kt`
 - **API服务**：`app/src/main/java/com/example/aiassistant/data/ChatRepository.kt`
 
 ## 📋 权限说明
 
-| 权限 | 用途 |
-|------|------|
-| INTERNET | 访问大模型API接口 |
-| FOREGROUND_SERVICE | 前台服务支持 |
-| POST_NOTIFICATIONS | 通知权限 |
-| BIND_ACCESSIBILITY_SERVICE | 无障碍服务，用于自动化操作 |
+| 权限                           | 用途            |
+| ---------------------------- | ------------- |
+| INTERNET                     | 访问大模型API接口    |
+| FOREGROUND\_SERVICE          | 前台服务支持        |
+| POST\_NOTIFICATIONS          | 通知权限          |
+| BIND\_ACCESSIBILITY\_SERVICE | 无障碍服务，用于自动化操作 |
 
 ## 📁 项目结构
 
@@ -134,18 +150,34 @@ app/src/main/
 ## ❓ 常见问题
 
 ### 无障碍服务未启用
+
 应用会在启动后弹窗引导开启，请按照提示操作。
 
 ### API调用失败
+
 - 检查API Key是否正确
 - 检查网络连接
 - 确认模型名称正确
 
 ### 说明书显示问题
+
 - 确保内部存储权限正常
 - 检查文件路径是否正确
 
+### 说明书编辑问题
+
+- 只有内部存储的说明书可以编辑，默认说明书无法编辑
+- 长按说明书项，选择"编辑"选项
+- 编辑完成后点击保存按钮
+
+### 说明书删除问题
+
+- 只有内部存储的说明书可以删除，默认说明书无法删除
+- 长按说明书项，选择"删除"选项
+- 删除后无法恢复，请谨慎操作
+
 ### 应用闪退
+
 - 检查日志获取错误信息
 - 确保设备系统版本符合要求
 - 清理应用缓存后重试
@@ -173,3 +205,4 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ```
+

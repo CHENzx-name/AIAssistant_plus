@@ -10,7 +10,7 @@
 2. 交互效率低：重复点击、定位控件、输入文本步骤繁琐。
 3. 复杂操作门槛高：部分 APP 功能深藏多级菜单，缺乏可读操作说明。
 
-本项目面向上述痛点，构建一个“可对话、可执行、可引导”的 Android 智能助手，将自然语言输入转换为可落地的系统或应用操作，并提供可追溯的对话式交互体验。
+本项目面向上述痛点，构建一个"可对话、可执行、可引导"的 Android 智能助手，将自然语言输入转换为可落地的系统或应用操作，并提供可追溯的对话式交互体验。
 
 ## 2. 需求分析
 
@@ -45,55 +45,11 @@
 
 ## 3. 智能体架构
 
-智能体由“对话层 + 工具执行层 + 系统能力层”构成：
+智能体由"对话层 + 工具执行层 + 系统能力层"构成：
 
 1. 对话层：将用户输入与对话上下文提交给大模型，获取响应。
 2. 工具执行层：解析模型工具调用并执行本地函数，返回工具结果。
 3. 系统能力层：通过无障碍服务和系统 API 完成点击、输入、滑动、应用启动等操作。
-
-### 3.1 架构图 (Mermaid)
-
-```mermaid
-flowchart LR
-    U[User] --> UI[Chat UI]
-    UI --> BUS[AgentExecutionBus]
-    BUS --> SVC[AgentForegroundService]
-    SVC --> VM[ChatViewModel]
-    VM --> LLM[LLM API]
-    VM --> TOOLS[Tool Dispatcher]
-    TOOLS --> SYS[SystemTools]
-    TOOLS --> SCR[ScreenTools]
-    TOOLS --> LOC[LocalTools]
-    SYS --> ACC[AccessibilityService]
-    SCR --> ACC
-    SVC --> OVL[Floating Overlay]
-```
-
-### 3.2 工具调用流程 (Mermaid)
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant UI
-    participant Bus
-    participant Service
-    participant VM
-    participant LLM
-    participant Tools
-
-    User->>UI: 输入指令
-    UI->>Bus: 发送 userMessages
-    Bus->>Service: 分发消息
-    Service->>VM: sendMessage()
-    VM->>LLM: chat/completions
-    LLM-->>VM: 回复(含 tool_calls)
-    VM->>Tools: 解析并执行
-    Tools-->>VM: 工具结果
-    VM->>LLM: 追加 tool 消息再请求
-    LLM-->>VM: 最终回复
-    VM-->>Service: conversationUpdates
-    Service-->>UI: 刷新消息列表
-```
 
 ## 4. 技术方案
 
@@ -165,7 +121,7 @@ sequenceDiagram
 
 1. 基础对话测试：发送普通文本，验证 UI 更新与对话历史保持。
 2. 网络请求测试：输入指令触发模型调用，验证请求成功与错误提示。
-3. 工具调用测试：使用“获取时间/天气”等工具，验证工具结果显示。
+3. 工具调用测试：使用"获取时间/天气"等工具，验证工具结果显示。
 4. 无障碍测试：授权后执行点击、输入、滑动，验证行为生效。
 5. 悬浮窗测试：开启前台服务，检查悬浮窗显示与拖动、停止功能。
 6. 说明书功能测试：
