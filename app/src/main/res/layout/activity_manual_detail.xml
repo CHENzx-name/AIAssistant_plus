@@ -27,10 +27,7 @@
             android:maxLines="1000"
             android:scrollbars="vertical"
             android:scrollbarStyle="insideOverlay"
-            android:overScrollMode="always"
-            android:focusable="false"
-            android:focusableInTouchMode="false"
-            android:clickable="false" />
+            android:overScrollMode="always" />
 
     </LinearLayout>
 

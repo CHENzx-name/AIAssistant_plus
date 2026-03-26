@@ -40,6 +40,9 @@ class ManualDetailActivity : AppCompatActivity() {
             } else {
                 contentEditText.setText("未找到说明书文件路径")
                 contentEditText.isEnabled = false
+                contentEditText.isFocusable = false
+                contentEditText.isFocusableInTouchMode = false
+                contentEditText.isClickable = false
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -48,6 +51,9 @@ class ManualDetailActivity : AppCompatActivity() {
             contentEditText = findViewById(R.id.manual_content)
             contentEditText.setText("初始化失败: ${e.message}")
             contentEditText.isEnabled = false
+            contentEditText.isFocusable = false
+            contentEditText.isFocusableInTouchMode = false
+            contentEditText.isClickable = false
         }
     }
 
@@ -84,14 +90,23 @@ class ManualDetailActivity : AppCompatActivity() {
                         val content = inputStream.bufferedReader().use { it.readText() }
                         contentEditText.setText(content)
                         contentEditText.isEnabled = false
+                        contentEditText.isFocusable = false
+                        contentEditText.isFocusableInTouchMode = false
+                        contentEditText.isClickable = false
                     } else {
                         contentEditText.setText("无效的说明书文件")
                         contentEditText.isEnabled = false
+                        contentEditText.isFocusable = false
+                        contentEditText.isFocusableInTouchMode = false
+                        contentEditText.isClickable = false
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     contentEditText.setText("加载默认说明书失败: ${e.message}")
-                    contentEditText.isEnabled = false
+                        contentEditText.isEnabled = false
+                        contentEditText.isFocusable = false
+                        contentEditText.isFocusableInTouchMode = false
+                        contentEditText.isClickable = false
                 }
             } else {
                 // 从内部存储加载
@@ -101,20 +116,32 @@ class ManualDetailActivity : AppCompatActivity() {
                         val content = file.readText(StandardCharsets.UTF_8)
                         contentEditText.setText(content)
                         contentEditText.isEnabled = true
+                        contentEditText.isFocusable = true
+                        contentEditText.isFocusableInTouchMode = true
+                        contentEditText.isClickable = true
                     } else {
                         contentEditText.setText("说明书文件不存在")
                         contentEditText.isEnabled = false
+                        contentEditText.isFocusable = false
+                        contentEditText.isFocusableInTouchMode = false
+                        contentEditText.isClickable = false
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     contentEditText.setText("加载用户说明书失败: ${e.message}")
-                    contentEditText.isEnabled = false
+                        contentEditText.isEnabled = false
+                        contentEditText.isFocusable = false
+                        contentEditText.isFocusableInTouchMode = false
+                        contentEditText.isClickable = false
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
             contentEditText.setText("加载说明书失败: ${e.message}")
             contentEditText.isEnabled = false
+            contentEditText.isFocusable = false
+            contentEditText.isFocusableInTouchMode = false
+            contentEditText.isClickable = false
         }
     }
 

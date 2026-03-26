@@ -728,9 +728,6 @@ class ChatViewModel : ViewModel() {
                 manualsDir.mkdirs()
             }
             
-            val manualFileName = "${packageName}_manual.md"
-            val manualFile = File(manualsDir, manualFileName)
-            
             // 获取应用名称
             val appName = try {
                 val pm = context.packageManager
@@ -742,6 +739,11 @@ class ChatViewModel : ViewModel() {
             
             // 设置当前正在操作的应用包名
             currentAppPackageName = packageName
+            
+            // 使用应用中文名称作为文件名（替换空格为下划线）
+            val safeAppName = appName.replace(" ", "_")
+            val manualFileName = "${safeAppName}_manual.md"
+            val manualFile = File(manualsDir, manualFileName)
             
             if (!manualFile.exists()) {
                 // 如果说明书不存在，创建新的
@@ -765,85 +767,148 @@ class ChatViewModel : ViewModel() {
     private fun updateManualProcess(context: Context, packageName: String) {
         try {
             val manualsDir = File(context.filesDir, "manuals")
-            val manualFileName = "${packageName}_manual.md"
+            
+            // 获取应用名称
+            val appName = try {
+                val pm = context.packageManager
+                val appInfo = pm.getApplicationInfo(packageName, 0)
+                pm.getApplicationLabel(appInfo).toString()
+            } catch (e: Exception) {
+                packageName
+            }
+            
+            // 使用应用中文名称作为文件名（替换空格为下划线）
+            val safeAppName = appName.replace(" ", "_")
+            val manualFileName = "${safeAppName}_manual.md"
             val manualFile = File(manualsDir, manualFileName)
             
             if (manualFile.exists()) {
-                // 获取应用名称
-                val appName = try {
-                    val pm = context.packageManager
-                    val appInfo = pm.getApplicationInfo(packageName, 0)
-                    pm.getApplicationLabel(appInfo).toString()
-                } catch (e: Exception) {
-                    packageName
-                }
                 
                 // 读取现有内容
                 var existingContent = manualFile.readText(StandardCharsets.UTF_8)
                 
-                // 生成流程总结
-                var processSummary = ""
-                when (packageName) {
-                    "com.bilibili.app.in" -> {
-                        // B站操作流程
-                        processSummary = """
-## 2. 搜索并播放视频/电影
-1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
-2. 点击顶部 **搜索栏**（放大镜图标）。
-3. 输入搜索内容（视频名称或电影名称）。
-4. 在搜索结果中找到目标内容并点击。
-5. 点击播放按钮开始观看。
-
-## 3. 浏览并播放视频
-1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
-2. 浏览首页推荐视频。
-3. 点击感兴趣的视频开始观看。
-                        """.trimIndent()
-                    }
-                    "com.tencent.mm" -> {
-                        // 微信操作流程
-                        processSummary = """
-## 2. 发送消息
-1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
-2. 选择要发送消息的联系人或群聊。
-3. 点击输入框。
-4. 输入消息内容。
-5. 点击发送按钮。
-                        """.trimIndent()
-                    }
-                    else -> {
-                        // 通用应用操作流程
-                        processSummary = """
-## 2. 基本操作流程
-1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
-2. 根据界面提示进行操作。
-3. 点击相应的功能按钮。
-4. 查看操作结果。
-                        """.trimIndent()
-                    }
-                }
+                // 根据应用包名生成新的功能章节
+                val newSections = generateNewFunctionSections(packageName, appName, existingContent)
                 
-                // 更新流程总结部分
-                val processSectionTitle = "## 操作流程总结"
-                if (existingContent.contains(processSectionTitle)) {
-                    val beforeProcess = existingContent.substringBefore(processSectionTitle)
-                    val afterProcess = existingContent.substringAfter(processSectionTitle).substringAfter("\n\n")
-                    existingContent = "$beforeProcess$processSectionTitle\n\n$processSummary\n\n$afterProcess"
-                } else {
-                    existingContent = """$existingContent
-
-$processSectionTitle
-$processSummary"""
+                // 如果有新的章节，添加到说明书中
+                if (newSections.isNotEmpty()) {
+                    // 查找最后一个编号章节的编号
+                    val lastNumber = getLastSectionNumber(existingContent)
+                    var nextNumber = lastNumber + 1
+                    
+                    // 添加新章节
+                    var sectionsToAdd = ""
+                    for (section in newSections) {
+                        sectionsToAdd += """
+## ${nextNumber}. ${section.title}
+${section.content}
+                        """.trimIndent() + "\n\n"
+                        nextNumber++
+                    }
+                    
+                    // 添加到现有内容的末尾
+                    existingContent += sectionsToAdd
+                    
+                    // 写入更新后的内容
+                    manualFile.writeText(existingContent, StandardCharsets.UTF_8)
+                    Log.d("ChatViewModel", "更新说明书，添加新功能章节: ${manualFile.absolutePath}")
                 }
-                
-                // 写入更新后的内容
-                manualFile.writeText(existingContent, StandardCharsets.UTF_8)
-                Log.d("ChatViewModel", "更新流程总结: ${manualFile.absolutePath}")
             }
         } catch (e: Exception) {
             Log.e("ChatViewModel", "更新流程总结失败", e)
         }
     }
+    
+    /**
+     * 生成新的功能章节
+     * @param packageName 应用包名
+     * @param appName 应用名称
+     * @param existingContent 现有内容
+     * @return 新的功能章节列表
+     */
+    private fun generateNewFunctionSections(packageName: String, appName: String, existingContent: String): List<FunctionSection> {
+        val sections = mutableListOf<FunctionSection>()
+        
+        when (packageName) {
+            "com.bilibili.app.in" -> {
+                // B站功能章节
+                val searchSection = FunctionSection(
+                    title = "搜索并播放视频/电影",
+                    content = """1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
+2. 点击顶部 **搜索栏**（放大镜图标）。
+3. 输入搜索内容（视频名称或电影名称）。
+4. 在搜索结果中找到目标内容并点击。
+5. 点击播放按钮开始观看。"""
+                )
+                
+                val browseSection = FunctionSection(
+                    title = "浏览并播放视频",
+                    content = """1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
+2. 浏览首页推荐视频。
+3. 点击感兴趣的视频开始观看。"""
+                )
+                
+                // 检查是否已存在这些章节
+                if (!existingContent.contains(searchSection.title)) {
+                    sections.add(searchSection)
+                }
+                if (!existingContent.contains(browseSection.title)) {
+                    sections.add(browseSection)
+                }
+            }
+            "com.tencent.mm" -> {
+                // 微信功能章节
+                val sendMessageSection = FunctionSection(
+                    title = "发送消息",
+                    content = """1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
+2. 选择要发送消息的联系人或群聊。
+3. 点击输入框。
+4. 输入消息内容。
+5. 点击发送按钮。"""
+                )
+                
+                if (!existingContent.contains(sendMessageSection.title)) {
+                    sections.add(sendMessageSection)
+                }
+            }
+            else -> {
+                // 通用应用功能章节
+                val basicSection = FunctionSection(
+                    title = "基本操作流程",
+                    content = """1. 打开 **$appName**，如有广告弹窗点击 **跳过**。
+2. 根据界面提示进行操作。
+3. 点击相应的功能按钮。
+4. 查看操作结果。"""
+                )
+                
+                if (!existingContent.contains(basicSection.title)) {
+                    sections.add(basicSection)
+                }
+            }
+        }
+        
+        return sections
+    }
+    
+    /**
+     * 获取现有内容中最后一个编号章节的编号
+     * @param content 现有内容
+     * @return 最后一个编号章节的编号
+     */
+    private fun getLastSectionNumber(content: String): Int {
+        val pattern = Regex("## (\\d+)\\.")
+        val matches = pattern.findAll(content)
+        val numbers = matches.map { it.groupValues[1].toInt() }.toList()
+        return numbers.maxOrNull() ?: 1
+    }
+    
+    /**
+     * 功能章节数据类
+     */
+    data class FunctionSection(
+        val title: String,
+        val content: String
+    )
     
     /**
      * 生成与assets格式一致的说明书内容

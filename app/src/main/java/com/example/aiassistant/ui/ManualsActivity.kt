@@ -3,11 +3,14 @@ package com.example.aiassistant.ui
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import com.example.aiassistant.R
 import java.io.File
 
@@ -69,8 +72,10 @@ class ManualsActivity : AppCompatActivity() {
                     }
                     // 替换下划线为空格
                     appName = appName.replace("_", " ")
-                    if (!manualsList.contains(appName)) {
-                        manualsList.add(appName)
+                    // 在默认文件夹中的说明书标题前面加"默认"
+                    val displayName = "默认 $appName"
+                    if (!manualsList.contains(displayName)) {
+                        manualsList.add(displayName)
                         manualFiles.add(File("assets/$fileName"))
                     }
                 }
@@ -93,24 +98,100 @@ class ManualsActivity : AppCompatActivity() {
                 manualsListView.adapter = adapter
 
                 manualsListView.onItemClickListener = AdapterView.OnItemClickListener {
-                    _, _, position, _ ->
-                    try {
-                        if (position < manualFiles.size && position < manualsList.size) {
-                            val selectedFile = manualFiles[position]
-                            val intent = Intent(this, ManualDetailActivity::class.java)
-                            intent.putExtra("file_path", selectedFile.absolutePath)
-                            intent.putExtra("app_name", manualsList[position])
-                            startActivity(intent)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+                _, _, position, _ ->
+                try {
+                    if (position < manualFiles.size && position < manualsList.size) {
+                        val selectedFile = manualFiles[position]
+                        val intent = Intent(this, ManualDetailActivity::class.java)
+                        intent.putExtra("file_path", selectedFile.absolutePath)
+                        intent.putExtra("app_name", manualsList[position])
+                        startActivity(intent)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            
+            // 添加长按菜单，用于编辑用户创建的说明书
+            manualsListView.onItemLongClickListener = AdapterView.OnItemLongClickListener { _, view, position, _ ->
+                if (position < manualFiles.size && position < manualsList.size) {
+                    val selectedFile = manualFiles[position]
+                    // 只有内部存储的说明书可以编辑，assets中的说明书不能编辑
+                    if (!selectedFile.absolutePath.contains("assets")) {
+                        showEditMenu(view, selectedFile, position)
+                        return@OnItemLongClickListener true
                     }
                 }
+                return@OnItemLongClickListener false
+            }
             }
         } catch (e: Exception) {
             e.printStackTrace()
             manualsListView.visibility = View.GONE
             emptyTextView.visibility = View.VISIBLE
+        }
+    }
+
+    /**
+     * 显示编辑菜单
+     * @param anchorView 长按的视图
+     * @param file 要编辑的文件
+     * @param position 文件在列表中的位置
+     */
+    private fun showEditMenu(anchorView: View, file: File, position: Int) {
+        val popupMenu = PopupMenu(this, anchorView)
+        popupMenu.menuInflater.inflate(R.menu.manual_list_menu, popupMenu.menu)
+        
+        popupMenu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_edit -> {
+                    editManual(file, position)
+                    true
+                }
+                R.id.action_delete -> {
+                    deleteManual(file, position)
+                    true
+                }
+                else -> false
+            }
+        }
+        
+        popupMenu.show()
+    }
+    
+    /**
+     * 编辑说明书
+     * @param file 要编辑的文件
+     * @param position 文件在列表中的位置
+     */
+    private fun editManual(file: File, position: Int) {
+        val intent = Intent(this, ManualDetailActivity::class.java)
+        intent.putExtra("file_path", file.absolutePath)
+        intent.putExtra("app_name", manualsList[position])
+        startActivity(intent)
+    }
+    
+    /**
+     * 删除说明书
+     * @param file 要删除的文件
+     * @param position 文件在列表中的位置
+     */
+    private fun deleteManual(file: File, position: Int) {
+        try {
+            if (file.delete()) {
+                // 删除成功，更新列表
+                manualsList.removeAt(position)
+                manualFiles.removeAt(position)
+                loadManuals()
+                setupListView()
+                
+                Toast.makeText(this, "删除成功", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "删除失败", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "删除失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
