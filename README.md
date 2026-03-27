@@ -188,21 +188,26 @@ app/src/main/
 
 ## 📄 许可证
 
-Apache License 2.0
+**私有许可证 - 禁止商用**
 
 ```
 Copyright (c) 2026 AI Assistant Project
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+保留所有权利。
 
-    http://www.apache.org/licenses/LICENSE-2.0
+本项目仅供个人学习和非商业用途使用。未经作者明确书面许可，不得用于商业目的。
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+禁止以下行为：
+1. 商业使用本项目的代码、功能或服务
+2. 在商业产品中集成或分发本项目
+3. 销售基于本项目的任何衍生作品
+4. 将本项目用于任何盈利性活动
+
+允许的行为：
+1. 个人学习和研究
+2. 在非商业环境中使用
+3. 提交问题报告和改进建议
+
+违反本许可证将依法追究法律责任。
 ```
 
