@@ -61,7 +61,7 @@
 
 <br />
 
-或直接在AI\_APP\app\build\outputs\apk\debug路径下找到apk文件安装到shou'ji'shang即可
+或直接在AI_APP\app\build\outputs\apk\debug路径下找到apk文件安装到手机上即可（需在设置界面填写用户自己的API_-KEY)
 
 ### 使用方法
 

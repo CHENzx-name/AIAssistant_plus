@@ -60,7 +60,7 @@ object AppConfig {
         val storedApiKey = prefs.getString("key_api_key", "") ?: ""
         apiKey = if (storedApiKey.isBlank()) {
           
-            "sk-a7ba8fe3a916194260b9765228b4c0a68281509b424a83e4274e6b517d4ff03e" // 仅在用户从未设置过时使用
+            "请输入您的 API Key" // 仅在用户从未设置过时使用
 
         } else {
             storedApiKey
