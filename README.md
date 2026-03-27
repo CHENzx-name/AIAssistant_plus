@@ -1,6 +1,6 @@
 # AI Assistant - Android自动化助手
 
-一款智能的Android应用自动化操作助手，集成大语言模型，能够自动执行手机操作并生成操作说明书。
+一款智能的Android应用自动化操作助手，集成大语言模型，能够自动执行手机操作并生成操作说明书。演示视频B站地址：【AIAssistant】https://www.bilibili.com/video/BV1y8XNBQEvU?vd_source=22c2c2425dddb9ebecb648fb7bd3f8b7
 
 ## ✨ 功能特性
 
