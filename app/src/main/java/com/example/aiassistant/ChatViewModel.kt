@@ -28,6 +28,7 @@ import java.io.IOException
 import kotlinx.serialization.builtins.*
 import kotlinx.serialization.Serializable
 import com.example.aiassistant.domain.ScreenTools
+import com.example.aiassistant.domain.SafetyHarness
 import com.example.aiassistant.data.LaunchAppParams
 import com.example.aiassistant.data.FunctionProperty
 import androidx.preference.PreferenceManager
@@ -527,6 +528,23 @@ class ChatViewModel : ViewModel() {
     private suspend fun handleToolCalls(toolCalls: List<ToolCall>, context: Context) {
         // 遍历模型请求的所有工具调用
         for (toolCall in toolCalls) {
+            val decision = SafetyHarness.guard(
+                toolName = toolCall.function.name,
+                rawArgs = toolCall.function.arguments,
+                context = context
+            )
+
+            if (!decision.allowed) {
+                val blockedContent = decision.reason ?: "安全拦截: 当前操作被阻止。"
+                val blockedToolMessage = com.example.aiassistant.data.ChatMessage(
+                    role = "tool",
+                    content = blockedContent,
+                    toolCallId = toolCall.id
+                )
+                conversationHistory.add(blockedToolMessage)
+                continue
+            }
+
             // 根据函数名调用对应的本地Kotlin函数
             val toolResultContent = when (toolCall.function.name) {
                 // 已有工具

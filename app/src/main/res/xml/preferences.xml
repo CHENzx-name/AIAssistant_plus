@@ -33,6 +33,16 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="安全保护">
+
+        <SwitchPreferenceCompat
+            app:key="key_safety_harness_enabled"
+            app:title="启用运行时安全保护"
+            app:summary="拦截高风险动作（敏感应用启动、可疑敏感文本输入、异常高频操作）"
+            app:defaultValue="true" />
+
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="说明书管理">
 
         <Preference

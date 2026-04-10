@@ -97,6 +97,11 @@ object ScreenTools {
         val nodeToInput = lastAnalyzedElements[elementId]
             ?: return "错误: 找不到ID为 $elementId 的元素。请先调用 observe_screen 来刷新元素列表。"
 
+        val decision = SafetyHarness.guardTextContent(text)
+        if (!decision.allowed) {
+            return decision.reason ?: "安全拦截: 当前输入被阻止。"
+        }
+
         if (nodeToInput.isEditable) {
             val arguments = Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)

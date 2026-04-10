@@ -20,6 +20,7 @@ import android.view.WindowManager
 import android.accessibilityservice.GestureDescription
 import android.graphics.Rect
 import com.example.aiassistant.domain.AgentExecutionBus
+import com.example.aiassistant.config.AppConfig
 import kotlin.math.max
 import kotlin.math.min
 /**
@@ -33,6 +34,11 @@ object SystemTools {
     }
 
     fun inputText(text: String): String {
+        val decision = SafetyHarness.guardTextContent(text)
+        if (!decision.allowed) {
+            return decision.reason ?: "安全拦截: 当前输入被阻止。"
+        }
+
         val success = AgentAccessibilityService.instance?.inputTextInFocusedField(text)
         return if (success == true) "文本 '$text' 输入成功。" else "输入失败，未找到活动的输入框。"
     }
@@ -52,31 +58,38 @@ object SystemTools {
      * @param packageName 要启动的应用的完整包名 (例如 "com.android.settings")。
      * @return 描述操作结果的字符串。
      */
-    fun launchApp(context: Context, packageName: String): String = try {
+    fun launchApp(context: Context, packageName: String): String {
+        return try {
 
-        val pm = context.packageManager
-        val launchIntent = pm.getLaunchIntentForPackage(packageName)?.apply {
-            // ★ 关键：清栈 + 新任务
-            addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TASK or     // 清掉旧栈
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP         // 可选，进一步保证
-            )
-            // 再次声明 MAIN / LAUNCHER，兼容部分定制 ROM
-            action = Intent.ACTION_MAIN
-            addCategory(Intent.CATEGORY_LAUNCHER)
+            if (AppConfig.safetyHarnessEnabled && SafetyHarness.isSensitivePackage(packageName)) {
+                val blockedPkg = packageName.trim().lowercase().substringBefore('/')
+                return "安全拦截: 禁止自动启动敏感系统应用 $blockedPkg。"
+            }
+
+            val pm = context.packageManager
+            val launchIntent = pm.getLaunchIntentForPackage(packageName)?.apply {
+                // ★ 关键：清栈 + 新任务
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TASK or     // 清掉旧栈
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP         // 可选，进一步保证
+                )
+                // 再次声明 MAIN / LAUNCHER，兼容部分定制 ROM
+                action = Intent.ACTION_MAIN
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+
+            if (launchIntent != null) {
+                context.startActivity(launchIntent)
+                "应用 $packageName 已成功启动（已重置至主页面）。"
+            } else {
+                "错误：未找到包名为 $packageName 的应用。"
+            }
+
+        } catch (e: Exception) {
+            Log.e("SystemTools", "启动应用失败: $packageName", e)
+            "错误：启动应用 $packageName 时发生异常。"
         }
-
-        if (launchIntent != null) {
-            context.startActivity(launchIntent)
-            "应用 $packageName 已成功启动（已重置至主页面）。"
-        } else {
-            "错误：未找到包名为 $packageName 的应用。"
-        }
-
-    } catch (e: Exception) {
-        Log.e("SystemTools", "启动应用失败: $packageName", e)
-        "错误：启动应用 $packageName 时发生异常。"
     }
 
 
