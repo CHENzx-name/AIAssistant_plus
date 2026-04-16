@@ -2,12 +2,15 @@
 package com.example.aiassistant.ui
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.database.ContentObserver
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.provider.Settings
+import android.provider.MediaStore
 import android.text.TextUtils
 import android.net.Uri
 import android.os.Build
@@ -26,6 +29,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -36,7 +40,11 @@ import com.example.aiassistant.domain.AgentExecutionBus
 import com.example.aiassistant.services.AgentAccessibilityService
 import com.example.aiassistant.services.AgentForegroundService
 import com.example.aiassistant.services.AsrManager
+import com.example.aiassistant.services.TtsManager
 import com.example.aiassistant.utils.AccessibilityUtils
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.google.mlkit.vision.text.TextRecognition
 import kotlinx.coroutines.launch
 import com.example.aiassistant.data.ChatMessage as ApiChatMessage // 使用别名区分API模型
 import com.example.aiassistant.config.AppConfig
@@ -48,11 +56,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var messageInput: EditText
     private lateinit var sendButton: ImageButton
     private lateinit var micButton: ImageButton
+    private lateinit var cameraButton: ImageButton
     private lateinit var settingsButton: ImageView
     private lateinit var exitButton: Button
     private lateinit var accessibilityButton: Button
     private lateinit var assistantLayout: ConstraintLayout
     private lateinit var rootContainer: View
+    private lateinit var ttsManager: TtsManager
+    private var lastSpokenAssistantReply: String? = null
+    private var ocrPickingInProgress = false
+
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        ocrPickingInProgress = false
+        if (uri == null) {
+            return@registerForActivityResult
+        }
+        runOcrWithImageUri(uri)
+    }
 
     private val asrManager by lazy {
         AsrManager(
@@ -85,6 +105,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        ttsManager = TtsManager(this)
 
         startAgentService()
 
@@ -111,6 +132,7 @@ class MainActivity : AppCompatActivity() {
         messageInput = findViewById(R.id.message_input)
         sendButton = findViewById(R.id.send_button)
         micButton = findViewById(R.id.mic_button)
+        cameraButton = findViewById(R.id.camera_button)
         settingsButton = findViewById(R.id.settings_button)
         exitButton = findViewById(R.id.exit_button)
         accessibilityButton = findViewById(R.id.accessibility_button)
@@ -146,6 +168,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 messageInput.text.clear()
             }
+        }
+
+        cameraButton.setOnClickListener {
+            launchOcrPicker()
         }
 
         micButton.setOnTouchListener { _, event ->
@@ -232,6 +258,20 @@ class MainActivity : AppCompatActivity() {
                 messageListForAdapter.addAll(uiMessages)
                 chatAdapter.notifyDataSetChanged()
 
+                val latestAssistantReply = apiMessages
+                    .lastOrNull { it.role == "assistant" }
+                    ?.content
+                    ?.trim()
+
+                if (
+                    AppConfig.voiceBroadcastEnabled &&
+                    !latestAssistantReply.isNullOrBlank() &&
+                    latestAssistantReply != lastSpokenAssistantReply
+                ) {
+                    ttsManager.speak(latestAssistantReply)
+                    lastSpokenAssistantReply = latestAssistantReply
+                }
+
                 if (messageListForAdapter.isNotEmpty()) {
                     chatRecyclerView.scrollToPosition(messageListForAdapter.size - 1)
                 }
@@ -255,6 +295,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        ttsManager.shutdown()
         accessibilityObserver?.let {
             contentResolver.unregisterContentObserver(it)
         }
@@ -335,6 +376,56 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.exit_cancel, null)
             .show()
+    }
+
+    private fun launchOcrPicker() {
+        if (ocrPickingInProgress) {
+            return
+        }
+        ocrPickingInProgress = true
+        pickImageLauncher.launch("image/*")
+    }
+
+    private fun runOcrWithImageUri(uri: Uri) {
+        val bitmap = decodeBitmapFromUri(uri)
+        if (bitmap == null) {
+            Toast.makeText(this, "无法读取图片", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+        val image = InputImage.fromBitmap(bitmap, 0)
+        recognizer.process(image)
+            .addOnSuccessListener { result ->
+                val recognized = result.text.trim()
+                if (recognized.isBlank()) {
+                    Toast.makeText(this, "未识别到文字", Toast.LENGTH_SHORT).show()
+                } else {
+                    messageInput.setText(recognized)
+                    messageInput.setSelection(recognized.length)
+                    Toast.makeText(this, "OCR识别完成", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "OCR识别失败", Toast.LENGTH_SHORT).show()
+            }
+            .addOnCompleteListener {
+                recognizer.close()
+            }
+    }
+
+    private fun decodeBitmapFromUri(uri: Uri): Bitmap? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val source = ImageDecoder.createSource(contentResolver, uri)
+                ImageDecoder.decodeBitmap(source)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaStore.Images.Media.getBitmap(contentResolver, uri)
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun refreshOverlay() {

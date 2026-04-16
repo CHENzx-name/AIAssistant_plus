@@ -100,6 +100,16 @@
                 android:src="@drawable/ic_mic" />
 
             <ImageButton
+                android:id="@+id/camera_button"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_send_button"
+                android:elevation="2dp"
+                android:contentDescription="OCR识图"
+                android:src="@drawable/ic_camera" />
+
+            <ImageButton
                 android:id="@+id/send_button"
                 android:layout_width="48dp"
                 android:layout_height="48dp"

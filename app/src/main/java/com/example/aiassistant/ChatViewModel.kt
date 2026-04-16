@@ -204,6 +204,18 @@ class ChatViewModel : ViewModel() {
             Tool(
                 type = "function",
                 function = FunctionDescription(
+                    name = "ocr_screen_text",
+                    description = "对当前屏幕执行OCR文字识别，返回完整文本和文本块坐标，用于辅助识别无障碍树里拿不到的文字。",
+                    parameters = FunctionParameters(
+                        type = "object",
+                        properties = emptyMap(),
+                        required = emptyList()
+                    )
+                )
+            ),
+            Tool(
+                type = "function",
+                function = FunctionDescription(
                     name = "click_element",
                     description = "根据 'observe_screen' 返回的元素 'id' 点击一个UI元素。",
                     parameters = FunctionParameters(
@@ -582,6 +594,9 @@ class ChatViewModel : ViewModel() {
                 }
                 "observe_screen" -> {
                     ScreenTools.analyzeScreen()
+                }
+                "ocr_screen_text" -> {
+                    ScreenTools.recognizeScreenTextWithOcr()
                 }
                 "click_element" -> {
                     val params = json.decodeFromString<ElementClickParams>(toolCall.function.arguments)

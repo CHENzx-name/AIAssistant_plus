@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">AIAssistant</string>
+    <string name="app_name">RacCoon</string>
     <string name="accessibility_service_description">AI 助手代理服务，用于执行自动化操作</string>
     <string name="exit_app">退出</string>
     <string name="exit_title">退出应用</string>
@@ -19,9 +19,11 @@
     <string-array name="mic_mode_entries">
         <item>识别后填入输入框（当前配置）</item>
         <item>识别后直接发送</item>
+        <item>OCR图片识别后填入输入框</item>
     </string-array>
     <string-array name="mic_mode_values">
         <item>fill</item>
         <item>send</item>
+        <item>ocr</item>
     </string-array>
 </resources>

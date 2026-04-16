@@ -65,6 +65,7 @@ dependencies {
     // 讯飞 SparkChain ASR SDK
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
     implementation("com.google.code.gson:gson:2.8.8")
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.0")
 
     // AndroidX Activity KTX - 用于轻松地创建ViewModel实例
     implementation("androidx.activity:activity-ktx:1.9.0")

@@ -31,6 +31,12 @@
             app:entryValues="@array/mic_mode_values"
             app:useSimpleSummaryProvider="true" />
 
+        <SwitchPreferenceCompat
+            app:key="key_voice_broadcast_enabled"
+            app:title="启用语音播报"
+            app:summary="自动播报助手回复内容"
+            app:defaultValue="true" />
+
     </PreferenceCategory>
 
     <PreferenceCategory app:title="安全保护">

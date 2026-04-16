@@ -15,6 +15,7 @@ object AppConfig {
     lateinit var apiKey: String
     lateinit var modelName: String
     var micMode: String = "fill"
+    var voiceBroadcastEnabled: Boolean = true
     var safetyHarnessEnabled: Boolean = true
 
     // --- 讯飞 SparkChain 三元组 ---
@@ -68,6 +69,7 @@ object AppConfig {
         }
         modelName = prefs.getString("key_model_name", DEFAULT_MODEL) ?: DEFAULT_MODEL
         micMode = prefs.getString("key_mic_mode", "fill") ?: "fill"
+        voiceBroadcastEnabled = prefs.getBoolean("key_voice_broadcast_enabled", true)
         safetyHarnessEnabled = prefs.getBoolean("key_safety_harness_enabled", true)
 
         // 2. 初始化并注册监听器
@@ -82,6 +84,9 @@ object AppConfig {
                 }
                 "key_mic_mode" -> {
                     micMode = sharedPreferences?.getString(key, "fill") ?: "fill"
+                }
+                "key_voice_broadcast_enabled" -> {
+                    voiceBroadcastEnabled = sharedPreferences?.getBoolean(key, true) ?: true
                 }
                 "key_safety_harness_enabled" -> {
                     safetyHarnessEnabled = sharedPreferences?.getBoolean(key, true) ?: true

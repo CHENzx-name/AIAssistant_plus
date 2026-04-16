@@ -1,14 +1,21 @@
 // 文件路径: app/src/main/java/com/example/aiassistant/domain/ScreenTools.kt
 package com.example.aiassistant.domain
 
+import android.os.Build
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.aiassistant.services.AgentAccessibilityService
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import android.accessibilityservice.AccessibilityService
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 // 1. 定义一个数据类来存储UI元素的信息
 // @Serializable 注解让它可以被 kotlinx.serialization 库自动转换为JSON
@@ -19,6 +26,18 @@ data class UiElement(
     val contentDescription: String?,
     val className: String?,
     val bounds: String // 元素的边界，格式为 "[left,top][right,bottom]"
+)
+
+@Serializable
+data class OcrBlock(
+    val text: String,
+    val bounds: String
+)
+
+@Serializable
+data class OcrScreenResult(
+    val fullText: String,
+    val blocks: List<OcrBlock>
 )
 
 object ScreenTools {
@@ -158,6 +177,60 @@ object ScreenTools {
 
         val success = service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
         return if (success) "成功返回主页面。" else "错误: 无法返回主页面。"
+    }
+
+    /**
+     * 对当前屏幕截图做OCR，补充无障碍节点中缺失的文字信息。
+     */
+    fun recognizeScreenTextWithOcr(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return "错误: 当前系统版本不支持屏幕OCR（需要Android 11及以上）。"
+        }
+
+        val service = AgentAccessibilityService.instance ?: return "错误: 无障碍服务未连接。"
+        val bitmap = service.captureScreenBitmap() ?: return "错误: 无法截取当前屏幕，请稍后重试。"
+
+        val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+        val resultRef = AtomicReference<String?>(null)
+        val latch = CountDownLatch(1)
+
+        val image = InputImage.fromBitmap(bitmap, 0)
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                val blocks = visionText.textBlocks
+                    .filter { !it.text.isNullOrBlank() }
+                    .map { block ->
+                        val rect = block.boundingBox
+                        val bounds = if (rect != null) {
+                            "[${rect.left},${rect.top}][${rect.right},${rect.bottom}]"
+                        } else {
+                            "[0,0][0,0]"
+                        }
+                        OcrBlock(text = block.text, bounds = bounds)
+                    }
+
+                val payload = OcrScreenResult(
+                    fullText = visionText.text.trim(),
+                    blocks = blocks
+                )
+                resultRef.set(json.encodeToString(payload))
+                latch.countDown()
+            }
+            .addOnFailureListener { e ->
+                resultRef.set("错误: 屏幕OCR失败 - ${e.message}")
+                latch.countDown()
+            }
+            .addOnCompleteListener {
+                recognizer.close()
+                bitmap.recycle()
+            }
+
+        val completed = latch.await(6, TimeUnit.SECONDS)
+        if (!completed) {
+            return "错误: 屏幕OCR超时，请重试。"
+        }
+
+        return resultRef.get() ?: "错误: 屏幕OCR无返回结果。"
     }
 
 

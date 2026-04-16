@@ -2,13 +2,17 @@ package com.example.aiassistant.services
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.graphics.Bitmap
 import android.graphics.Path
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -128,6 +132,54 @@ class AgentAccessibilityService : AccessibilityService() {
             .build()
 
         return dispatchGestureAndAwait(gesture, timeoutMs = safeDuration + 1500)
+    }
+
+    /**
+     * 截取当前屏幕并返回位图。仅支持 Android 11+。
+     */
+    fun captureScreenBitmap(timeoutMs: Int = 3000): Bitmap? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return null
+        }
+
+        val bitmapRef = AtomicReference<Bitmap?>(null)
+        val latch = CountDownLatch(1)
+
+        val captureAction = {
+            takeScreenshot(
+                Display.DEFAULT_DISPLAY,
+                mainExecutor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshotResult: ScreenshotResult) {
+                        val hardwareBuffer = screenshotResult.hardwareBuffer
+                        val colorSpace = screenshotResult.colorSpace
+                        try {
+                            val hardwareBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                            bitmapRef.set(hardwareBitmap?.copy(Bitmap.Config.ARGB_8888, false))
+                        } catch (_: Exception) {
+                            bitmapRef.set(null)
+                        } finally {
+                            hardwareBuffer.close()
+                            latch.countDown()
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        bitmapRef.set(null)
+                        latch.countDown()
+                    }
+                }
+            )
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            captureAction()
+        } else {
+            Handler(Looper.getMainLooper()).post(captureAction)
+        }
+
+        val completed = latch.await(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        return if (completed) bitmapRef.get() else null
     }
 
     private fun dispatchGestureAndAwait(gesture: GestureDescription, timeoutMs: Int): Boolean {
